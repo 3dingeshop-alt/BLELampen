@@ -50,9 +50,31 @@ final class BluetoothManager: NSObject, ObservableObject {
         CBUUID(string: "6E400001-B5A3-F393-E0A9-E50E24DCCA9E") // Nordic UART Service
     ]
 
+    // Einmal verbundene Geräte merken wir uns dauerhaft, damit wir sie beim nächsten Start
+    // (oder wenn iOS die App im Hintergrund aufweckt) automatisch wieder verbinden, ohne
+    // dass man sie erneut antippen muss.
+    private let knownDeviceIDsKey = "led_known_device_ids_v1"
+
+    private var knownDeviceIDs: [UUID] {
+        (UserDefaults.standard.stringArray(forKey: knownDeviceIDsKey) ?? []).compactMap { UUID(uuidString: $0) }
+    }
+
+    private func rememberDevice(_ id: UUID) {
+        var ids = Set(knownDeviceIDs)
+        guard !ids.contains(id) else { return }
+        ids.insert(id)
+        UserDefaults.standard.set(ids.map { $0.uuidString }, forKey: knownDeviceIDsKey)
+    }
+
     override init() {
         super.init()
-        central = CBCentralManager(delegate: self, queue: nil)
+        // Mit Restore-Identifier initialisieren: so kann iOS die App im Hintergrund wieder
+        // aufwecken, wenn sich ein bekanntes Gerät verbindet/trennt, auch wenn die App
+        // komplett geschlossen wurde (nicht nur im Hintergrund pausiert).
+        central = CBCentralManager(delegate: self, queue: nil, options: [
+            CBCentralManagerOptionRestoreIdentifierKey: "BLELampenCentralRestoreID",
+            CBCentralManagerOptionShowPowerAlertKey: true
+        ])
     }
 
     // MARK: - Scannen
@@ -67,6 +89,23 @@ final class BluetoothManager: NSObject, ObservableObject {
     func stopScanning() {
         central.stopScan()
         isScanning = false
+    }
+
+    /// Verbindet automatisch mit allen schon einmal benutzten Geräten, ohne dass man sie
+    /// in der Liste antippen muss - läuft bei jedem App-Start/Bluetooth-Einschalten.
+    private func autoConnectKnownDevices() {
+        let ids = knownDeviceIDs
+        guard !ids.isEmpty else { return }
+        for peripheral in central.retrievePeripherals(withIdentifiers: ids) {
+            guard peripheral.state == .disconnected else { continue }
+            let device = findOrCreateDevice(for: peripheral, rssi: 0)
+            device.name = peripheral.name ?? device.name
+            device.protocolType = LEDProtocolType.detect(fromName: device.name)
+            if !discoveredDevices.contains(where: { $0.id == peripheral.identifier }) {
+                discoveredDevices.append(device)
+            }
+            connect(device)
+        }
     }
 
     // MARK: - Verbinden
@@ -140,7 +179,32 @@ extension BluetoothManager: CBCentralManagerDelegate {
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
         isBluetoothReady = (central.state == .poweredOn)
         if central.state == .poweredOn {
+            autoConnectKnownDevices()
             startScanning()
+        }
+    }
+
+    /// Wird von iOS aufgerufen, wenn die App im Hintergrund neu gestartet wird, weil sich
+    /// ein bekanntes Bluetooth-Gerät meldet (State Restoration). Übernimmt die von iOS schon
+    /// verbundenen/verbindenden Peripherals, statt bei Null anzufangen.
+    func centralManager(_ central: CBCentralManager, willRestoreState dict: [String: Any]) {
+        guard let peripherals = dict[CBCentralManagerRestoredStatePeripheralsKey] as? [CBPeripheral] else { return }
+        for peripheral in peripherals {
+            peripheral.delegate = self
+            peripheralsByID[peripheral.identifier] = peripheral
+            let device = findOrCreateDevice(for: peripheral, rssi: 0)
+            device.name = peripheral.name ?? device.name
+            device.protocolType = LEDProtocolType.detect(fromName: device.name)
+            if !discoveredDevices.contains(where: { $0.id == peripheral.identifier }) {
+                discoveredDevices.append(device)
+            }
+            if peripheral.state == .connected {
+                device.isConnected = true
+                if !connectedDevices.contains(where: { $0.id == device.id }) {
+                    connectedDevices.append(device)
+                }
+                peripheral.discoverServices(nil)
+            }
         }
     }
 
@@ -168,6 +232,7 @@ extension BluetoothManager: CBCentralManagerDelegate {
 
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         guard let device = discoveredDevices.first(where: { $0.id == peripheral.identifier }) else { return }
+        rememberDevice(peripheral.identifier)
         DispatchQueue.main.async {
             device.isConnected = true
             if !self.connectedDevices.contains(where: { $0.id == device.id }) {
@@ -189,6 +254,11 @@ extension BluetoothManager: CBCentralManagerDelegate {
                 device.isConnected = false
                 self.connectedDevices.removeAll { $0.id == device.id }
             }
+        }
+        // Unerwarteter Abbruch (nicht vom Nutzer per disconnect() ausgelöst) bei einem
+        // bekannten Gerät: automatisch wieder verbinden, auch im Hintergrund.
+        if error != nil && knownDeviceIDs.contains(peripheral.identifier) {
+            central.connect(peripheral, options: nil)
         }
     }
 }

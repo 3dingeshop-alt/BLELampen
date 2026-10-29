@@ -21,7 +21,7 @@ enum LightEffect: String, CaseIterable, Identifiable, Codable {
         case .breathe: return 60
         case .strobe: return 150
         case .candle: return 110
-        case .halloween: return 130
+        case .halloween: return 70
         case .christmas: return 1200
         }
     }
@@ -82,10 +82,10 @@ final class SceneStore: ObservableObject {
     private static let defaultScenes: [LightScene] = [
         LightScene(name: "Regenbogen", effect: .rainbow, speedPercent: 50),
         LightScene(name: "Gemütlich atmen", effect: .breathe, speedPercent: 30),
-        LightScene(name: "Party-Blitz", effect: .strobe, speedPercent: 70),
+        LightScene(name: "Halloween 1", effect: .strobe, speedPercent: 70),
+        LightScene(name: "Halloween 2", effect: .halloween, speedPercent: 90),
         LightScene(name: "Kerzenschein", effect: .candle, speedPercent: 40),
         LightScene(name: "Farbwechsel", effect: .colorFade, speedPercent: 40),
-        LightScene(name: "Halloween", effect: .halloween, speedPercent: 45),
         LightScene(name: "Weihnachten", effect: .christmas, speedPercent: 30)
     ]
 

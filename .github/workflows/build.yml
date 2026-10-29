@@ -29,8 +29,6 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            GENERATE_INFOPLIST_FILE=YES \
-            INFOPLIST_FILE="" \
             archive
 
       - name: IPA von Hand packen (unsigniert, zum Sideloaden)

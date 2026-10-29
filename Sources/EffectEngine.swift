@@ -86,9 +86,16 @@ final class EffectEngine: ObservableObject {
             return (255, 140, 40, Int(flicker * 100))
 
         case .halloween:
-            let palette: [(UInt8, UInt8, UInt8)] = [(255, 100, 0), (140, 0, 220)] // Orange / Lila
-            let c = palette[Int(tick / 15) % palette.count]
-            let flicker = Double.random(in: 0.5...1.0)
+            // Mehrere knallige Spooky-Farben, die schnell durchwechseln (nicht nur Orange/Lila).
+            let palette: [(UInt8, UInt8, UInt8)] = [
+                (255, 90, 0),   // Kürbis-Orange
+                (140, 0, 220),  // Geister-Lila
+                (60, 255, 40),  // Gift-Grün
+                (255, 0, 40),   // Blutrot
+                (0, 200, 255)   // Geister-Blau
+            ]
+            let c = palette[Int(tick) % palette.count]
+            let flicker = Double.random(in: 0.6...1.0)
             return (c.0, c.1, c.2, Int(flicker * 100))
 
         case .christmas:
