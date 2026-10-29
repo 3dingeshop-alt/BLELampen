@@ -1,0 +1,32 @@
+workflows:
+  unsigned-ipa:
+    name: BLELampen - unsignierte IPA
+    max_build_duration: 30
+    instance_type: mac_mini_m2
+    environment:
+      xcode: latest
+    scripts:
+      - name: XcodeGen installieren
+        script: brew install xcodegen
+      - name: Xcode-Projekt generieren
+        script: xcodegen generate
+      - name: Unsigniertes Archiv bauen
+        script: |
+          xcodebuild \
+            -project BLELampen.xcodeproj \
+            -scheme BLELampen \
+            -configuration Release \
+            -sdk iphoneos \
+            -archivePath build/BLELampen.xcarchive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            archive
+      - name: IPA von Hand packen (unsigniert, zum Sideloaden)
+        script: |
+          mkdir -p build/Payload
+          cp -R "build/BLELampen.xcarchive/Products/Applications/BLELampen.app" build/Payload/
+          cd build
+          zip -r BLELampen.ipa Payload
+    artifacts:
+      - build/BLELampen.ipa
