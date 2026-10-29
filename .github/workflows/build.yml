@@ -24,11 +24,13 @@ jobs:
             -project BLELampen.xcodeproj \
             -scheme BLELampen \
             -configuration Release \
-            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
             -archivePath build/BLELampen.xcarchive \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
+            GENERATE_INFOPLIST_FILE=YES \
+            INFOPLIST_FILE="" \
             archive
 
       - name: IPA von Hand packen (unsigniert, zum Sideloaden)
