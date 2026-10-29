@@ -13,6 +13,12 @@ struct ProtocolTesterView: View {
     @State private var results: [TestResult] = []
     @State private var exportURL: IdentifiableURL?
 
+    /// nil = keine Selbstprüfung aktiv. Sonst: Index des gerade laufenden Testbefehls
+    /// aus TestCommandLibrary.candidates.
+    @State private var autoTestIndex: Int?
+
+    private var isAutoTesting: Bool { autoTestIndex != nil }
+
     struct TestResult: Identifiable {
         let id = UUID()
         let date = Date()
@@ -44,6 +50,38 @@ struct ProtocolTesterView: View {
                     }
                 }
 
+                Section("Automatische Selbstprüfung") {
+                    if isAutoTesting, let index = autoTestIndex, index < TestCommandLibrary.candidates.count {
+                        let candidate = TestCommandLibrary.candidates[index]
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Test \(index + 1) von \(TestCommandLibrary.candidates.count)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text(candidate.name).font(.headline)
+                            Text(candidate.hex).font(.caption2).foregroundStyle(.secondary)
+                            Text("Hat sich an der Lampe gerade etwas verändert?")
+                                .font(.subheadline)
+                            HStack {
+                                Button("✅ Ja") { autoTestAnswer(worked: true) }
+                                    .buttonStyle(.borderedProminent)
+                                Button("❌ Nein") { autoTestAnswer(worked: false) }
+                                    .buttonStyle(.bordered)
+                            }
+                            Button("Selbstprüfung abbrechen", role: .destructive) {
+                                autoTestIndex = nil
+                            }
+                            .font(.caption)
+                        }
+                        .padding(.vertical, 4)
+                    } else {
+                        Button("Selbstprüfung starten") { startAutoTest() }
+                            .disabled(selectedDevice == nil)
+                        Text("Geht automatisch alle vordefinierten Testbefehle unten der Reihe nach durch. Du bestätigst nach jedem einzelnen nur noch, ob sich etwas verändert hat.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
                 Section("Eigener Hex-Befehl") {
                     TextField("z.B. 56 ff 00 00 00 f0 aa", text: $customHex)
                         .autocapitalization(.none)
@@ -51,7 +89,7 @@ struct ProtocolTesterView: View {
                     Button("Senden") {
                         sendAndRecord(name: "Manuell", hex: customHex)
                     }
-                    .disabled(Data(hexString: customHex) == nil || selectedDevice == nil)
+                    .disabled(Data(hexString: customHex) == nil || selectedDevice == nil || isAutoTesting)
                 }
 
                 Section("Vordefinierte Testbefehle") {
@@ -64,7 +102,7 @@ struct ProtocolTesterView: View {
                                 Text(candidate.hex).font(.caption2).foregroundStyle(.secondary)
                             }
                         }
-                        .disabled(selectedDevice == nil)
+                        .disabled(selectedDevice == nil || isAutoTesting)
                     }
                 }
 
@@ -111,6 +149,32 @@ struct ProtocolTesterView: View {
             }
         }
         .padding(.vertical, 4)
+    }
+
+    private func startAutoTest() {
+        guard selectedDevice != nil, !TestCommandLibrary.candidates.isEmpty else { return }
+        autoTestIndex = 0
+        sendAutoTestCurrent()
+    }
+
+    private func sendAutoTestCurrent() {
+        guard let index = autoTestIndex, index < TestCommandLibrary.candidates.count else { return }
+        let candidate = TestCommandLibrary.candidates[index]
+        sendAndRecord(name: candidate.name, hex: candidate.hex)
+    }
+
+    private func autoTestAnswer(worked: Bool) {
+        guard let index = autoTestIndex else { return }
+        if let last = results.last {
+            setVerdict(last.id, worked ? "funktioniert" : "nichts passiert")
+        }
+        let next = index + 1
+        if next < TestCommandLibrary.candidates.count {
+            autoTestIndex = next
+            sendAutoTestCurrent()
+        } else {
+            autoTestIndex = nil
+        }
     }
 
     private func sendAndRecord(name: String, hex: String) {

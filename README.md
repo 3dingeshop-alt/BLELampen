@@ -1,8 +1,8 @@
 # BLELampen
 
 iOS-App (SwiftUI + CoreBluetooth) zur Steuerung von Bluetooth-LE-LED-Controllern
-(bestätigt funktionierend: ELK-BLEDOM / ELK-BLEDDM; experimentell: DMRRBA-007
-über den eingebauten Protokoll-Tester).
+(bestätigt funktionierend: ELK-BLEDOM / ELK-BLEDDM und DMRRBA-007; für noch
+unbekannte Controller gibt es den eingebauten Protokoll-Tester mit Selbstprüfung).
 
 ## IPA über GitHub Actions bauen
 

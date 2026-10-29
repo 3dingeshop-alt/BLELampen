@@ -73,8 +73,9 @@ struct DeviceControlView: View {
 
     private func sendColor(_ color: Color) {
         let components = color.rgbComponents()
-        if let data = device.commands.setColor(r: components.r, g: components.g, b: components.b) {
-            bt.send(data, to: device)
+        let packets = device.commands.colorPackets(r: components.r, g: components.g, b: components.b)
+        if !packets.isEmpty {
+            bt.send(packets, to: device)
         }
     }
 

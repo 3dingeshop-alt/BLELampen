@@ -4,7 +4,7 @@ import Foundation
 
 enum LEDProtocolType: String, CaseIterable, Identifiable {
     case elkBledom = "ELK-BLEDOM / BLEDDM"
-    case dmrrba007 = "DMRRBA-007 (experimentell)"
+    case dmrrba007 = "DMRRBA-007"
     case unknown = "Unbekannt / manuell"
 
     var id: String { rawValue }
@@ -31,6 +31,32 @@ enum LEDProtocolType: String, CaseIterable, Identifiable {
             return UnknownCommands()
         }
     }
+
+    /// Manche Controller (hier: DMRRBA-007) senden ihre echten Befehle über einen Service,
+    /// den die generische Auto-Erkennung sonst als "Systemdienst" ignorieren würde (der
+    /// Hersteller nutzt die Standard-Nordic-UART-Service-UUID für eigene Zwecke weiter).
+    /// Ist hier ein Wert gesetzt, wird GENAU diese Service-/Schreib-Characteristic benutzt,
+    /// statt die generische Erkennung (und deren Ignorierliste) laufen zu lassen.
+    var forcedServiceUUID: String? {
+        switch self {
+        case .dmrrba007: return "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"
+        default: return nil
+        }
+    }
+
+    var forcedWriteUUID: String? {
+        switch self {
+        case .dmrrba007: return "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"
+        default: return nil
+        }
+    }
+
+    var forcedNotifyUUID: String? {
+        switch self {
+        case .dmrrba007: return "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"
+        default: return nil
+        }
+    }
 }
 
 // MARK: - Gemeinsames Interface für alle Protokolle
@@ -42,11 +68,25 @@ protocol LEDCommandBuilder {
     func powerOn() -> Data?
     func powerOff() -> Data?
 
-    /// nil, wenn das Protokoll keine direkten RGB-Befehle unterstützt (siehe DMRRBA-007).
+    /// nil, wenn das Protokoll keine direkten RGB-Befehle unterstützt.
     func setColor(r: UInt8, g: UInt8, b: UInt8) -> Data?
 
     /// Helligkeit 0...100 Prozent. nil, wenn nicht unterstützt.
     func setBrightness(percent: Int) -> Data?
+
+    /// Im Normalfall ist "Farbe setzen" ein einzelner Befehl (siehe Standard-Implementierung
+    /// unten). Protokolle mit mehrteiligen Farbbefehlen (z.B. DMRRBA-007: erst Farbmodus
+    /// aktivieren, dann die RGB-Werte) überschreiben das und liefern mehrere Pakete, die
+    /// nacheinander gesendet werden. Muss hier als Protokoll-Anforderung stehen (nicht nur
+    /// als Extension), sonst wird die Überschreibung beim Aufruf über den LEDCommandBuilder-
+    /// Protokolltyp (wie device.commands) nicht benutzt.
+    func colorPackets(r: UInt8, g: UInt8, b: UInt8) -> [Data]
+}
+
+extension LEDCommandBuilder {
+    func colorPackets(r: UInt8, g: UInt8, b: UInt8) -> [Data] {
+        setColor(r: r, g: g, b: b).map { [$0] } ?? []
+    }
 }
 
 // MARK: - ELK-BLEDOM / ELK-BLEDDM (bestätigtes Protokoll aus dem Bluetooth-Log)
@@ -77,25 +117,49 @@ struct ElkBledomCommands: LEDCommandBuilder {
     }
 }
 
-// MARK: - DMRRBA-007 (noch nicht vollständig entschlüsselt)
+// MARK: - DMRRBA-007 (echtes Protokoll)
 //
-// Aus dem Log bestätigt ist nur der Verbindungs-Handshake. Die Farb-/Helligkeitsbefehle
-// scheinen fortlaufende Positionswerte eines Farbrads/Schiebereglers zu sein, keine
-// direkten RGB-Werte - deshalb hier erstmal nicht nachgebaut. Benutze den
-// Protokoll-Tester-Tab, um das mit gezielten Einzel-Taps weiter einzugrenzen.
+// Reverse engineered aus der Android-App "illumiHome" (com.lxillumi.illumihome), über den
+// quelloffenen Homey-Treiber https://github.com/smarthomesven/homey-illumi-home, dessen
+// Namensmuster "DMRRBA-00[1-9A]" unser Gerät exakt trifft. Kein Handshake nötig - die
+// Befehle gehen direkt über die Nordic-UART-Service-Characteristic (siehe forcedWriteUUID
+// oben in LEDProtocolType, die unsere generische Erkennung sonst ignorieren würde).
+//
+// Ein:         5A 01 02 01
+// Aus:         5A 01 02 00
+// Farbmodus:   5A 02 01 02        (immer VOR dem Farbbefehl senden)
+// Farbe:       5A 07 01 <R> <G> <B>
+// Helligkeit:  5A 03 01 <uint16, little-endian, 1...4095>
 
 struct DMRRBA007Commands: LEDCommandBuilder {
-    func handshake() -> [Data] {
+    func handshake() -> [Data] { [] }
+
+    func powerOn() -> Data? {
+        Data([0x5a, 0x01, 0x02, 0x01])
+    }
+
+    func powerOff() -> Data? {
+        Data([0x5a, 0x01, 0x02, 0x00])
+    }
+
+    func setColor(r: UInt8, g: UInt8, b: UInt8) -> Data? {
+        colorPackets(r: r, g: g, b: b).last
+    }
+
+    func colorPackets(r: UInt8, g: UInt8, b: UInt8) -> [Data] {
         [
-            Data([0x5a, 0x01, 0x02, 0x01]),
-            Data([0x5a, 0x02, 0x01, 0x01])
+            Data([0x5a, 0x02, 0x01, 0x02]),
+            Data([0x5a, 0x07, 0x01, r, g, b])
         ]
     }
 
-    func powerOn() -> Data? { nil }
-    func powerOff() -> Data? { nil }
-    func setColor(r: UInt8, g: UInt8, b: UInt8) -> Data? { nil }
-    func setBrightness(percent: Int) -> Data? { nil }
+    func setBrightness(percent: Int) -> Data? {
+        let clampedPercent = max(0, min(100, percent))
+        let value = max(1, Int((Double(clampedPercent) / 100.0 * 4095.0).rounded()))
+        let lowByte = UInt8(value & 0xff)
+        let highByte = UInt8((value >> 8) & 0xff)
+        return Data([0x5a, 0x03, 0x01, lowByte, highByte])
+    }
 }
 
 // MARK: - Unbekanntes Gerät (nur manuelles Senden im Tester)
@@ -134,7 +198,7 @@ extension Data {
 }
 
 // MARK: - Vordefinierte Testbefehle für den Protokoll-Tester
-// (für noch unbekannte oder nur teilweise verstandene Controller wie den DMRRBA-007)
+// (für noch unbekannte Controller, z.B. zukünftig neue Geräte wie "Lotus Lantern")
 
 struct TestCommand: Identifiable {
     let id = UUID()
@@ -144,10 +208,9 @@ struct TestCommand: Identifiable {
 
 enum TestCommandLibrary {
     static let candidates: [TestCommand] = [
-        TestCommand(name: "DMRRBA Handshake 1", hex: "5a 01 02 01"),
-        TestCommand(name: "DMRRBA Handshake 2", hex: "5a 02 01 01"),
-        TestCommand(name: "DMRRBA Power An (Vermutung)", hex: "5a 02 01 04"),
-        TestCommand(name: "DMRRBA Power Aus (Vermutung)", hex: "5a 02 01 05"),
+        TestCommand(name: "DMRRBA-007 Ein (bestätigt)", hex: "5a 01 02 01"),
+        TestCommand(name: "DMRRBA-007 Aus (bestätigt)", hex: "5a 01 02 00"),
+        TestCommand(name: "DMRRBA-007 Farbmodus (bestätigt)", hex: "5a 02 01 02"),
         TestCommand(name: "Generisch Rot (0x56-Format)", hex: "56 ff 00 00 00 f0 aa"),
         TestCommand(name: "Generisch Grün (0x56-Format)", hex: "56 00 ff 00 00 f0 aa"),
         TestCommand(name: "Generisch Blau (0x56-Format)", hex: "56 00 00 ff 00 f0 aa"),

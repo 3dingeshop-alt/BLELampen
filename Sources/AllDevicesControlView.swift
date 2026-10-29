@@ -36,7 +36,7 @@ struct AllDevicesControlView: View {
                     .onChange(of: color) { newValue in
                         let rgb = newValue.rgbComponents()
                         bt.sendToAllConnected { device in
-                            device.commands.setColor(r: rgb.r, g: rgb.g, b: rgb.b)
+                            device.commands.colorPackets(r: rgb.r, g: rgb.g, b: rgb.b)
                         }
                     }
             }
@@ -56,7 +56,7 @@ struct AllDevicesControlView: View {
             }
 
             Section {
-                Text("Geräte, deren Protokoll noch nicht entschlüsselt ist (z.B. DMRRBA-007), reagieren hier nicht mit - die steuerst du einzeln über den Protokoll-Tester.")
+                Text("Geräte, deren Protokoll noch nicht entschlüsselt ist, reagieren hier nicht mit - die steuerst du einzeln über den Protokoll-Tester.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

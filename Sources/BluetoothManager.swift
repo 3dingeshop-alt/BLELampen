@@ -13,6 +13,23 @@ final class BluetoothManager: NSObject, ObservableObject {
     /// Alle beim Scan gefundenen Geräte (noch nicht zwingend verbunden).
     @Published var discoveredDevices: [LEDDevice] = []
 
+    /// Standardmäßig AUS: zeigt in der Geräteliste nur erkannte LED-Controller
+    /// (ELK-BLEDOM/BLEDDM, DMRRBA-007) statt jedes Bluetooth-Gerät in der Nähe
+    /// (Fernseher, Kopfhörer usw.). Über den Button in der Toolbar umschaltbar.
+    @Published var showAllDevices = false
+
+    /// Was in der Liste tatsächlich angezeigt werden soll: ungefiltert, wenn showAllDevices
+    /// an ist oder das Gerät schon verbunden ist, sonst nur erkannte Protokolle.
+    var visibleDiscoveredDevices: [LEDDevice] {
+        discoveredDevices.filter { device in
+            !device.isConnected && (showAllDevices || device.protocolType != .unknown)
+        }
+    }
+
+    var hiddenDeviceCount: Int {
+        discoveredDevices.filter { !$0.isConnected && $0.protocolType == .unknown }.count
+    }
+
     /// Nur die aktuell verbundenen Geräte - das sind die, die in der Steuerungs-Ansicht auftauchen.
     @Published var connectedDevices: [LEDDevice] = []
 
@@ -70,11 +87,27 @@ final class BluetoothManager: NSObject, ObservableObject {
         device.addLog("TX  \(data.hexString)")
     }
 
+    /// Sendet mehrere Pakete nacheinander mit kleiner Pause dazwischen (manche Controller,
+    /// z.B. DMRRBA-007, brauchen das zwischen zwei zusammengehörigen Befehlen).
+    func send(_ packets: [Data], to device: LEDDevice) {
+        for (index, packet) in packets.enumerated() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * 0.03) { [weak self] in
+                self?.send(packet, to: device)
+            }
+        }
+    }
+
     func sendToAllConnected(_ makeData: (LEDDevice) -> Data?) {
         for device in connectedDevices {
             if let data = makeData(device) {
                 send(data, to: device)
             }
+        }
+    }
+
+    func sendToAllConnected(_ makePackets: (LEDDevice) -> [Data]) {
+        for device in connectedDevices {
+            send(makePackets(device), to: device)
         }
     }
 
@@ -177,35 +210,53 @@ extension BluetoothManager: CBPeripheralDelegate {
             return
         }
 
+        // Manche Protokolle (z.B. DMRRBA-007) schreiben eine ganz bestimmte Characteristic
+        // vor - auch wenn die in der generischen Ignorierliste steht (Nordic UART). Ist das
+        // der Fall, zählt NUR diese, die generische Erkennung darunter wird übersprungen.
+        let forcedWrite = device.protocolType.forcedWriteUUID.map { CBUUID(string: $0) }
+        let forcedNotify = device.protocolType.forcedNotifyUUID.map { CBUUID(string: $0) }
+
         for characteristic in service.characteristics ?? [] {
-            // Schreib-Characteristic auswählen: bevorzugt eine aus einem herstellerspezifischen
-            // Service (nicht Device Information / Generic Access / Nordic UART), die Write ohne
-            // Antwort unterstützt - das war in beiden ausgewerteten Protokollen der Fall.
             let canWrite = characteristic.properties.contains(.writeWithoutResponse)
                 || characteristic.properties.contains(.write)
-            let isIgnoredService = ignoredServiceUUIDs.contains(service.uuid)
 
-            if canWrite && device.writeCharacteristic == nil && !isIgnoredService {
-                device.writeCharacteristic = characteristic
-                device.writeType = characteristic.properties.contains(.writeWithoutResponse) ? .withoutResponse : .withResponse
-                device.addLog("Schreib-Characteristic gefunden: \(characteristic.uuid) in Service \(service.uuid)")
-
-                // Handshake senden, falls das Protokoll einen braucht (z.B. DMRRBA-007).
-                for handshakeData in device.commands.handshake() {
-                    send(handshakeData, to: device)
+            if let forcedWrite {
+                if canWrite && characteristic.uuid == forcedWrite && device.writeCharacteristic == nil {
+                    device.writeCharacteristic = characteristic
+                    device.writeType = characteristic.properties.contains(.writeWithoutResponse) ? .withoutResponse : .withResponse
+                    device.addLog("Schreib-Characteristic (fest zugeordnet): \(characteristic.uuid) in Service \(service.uuid)")
+                    for handshakeData in device.commands.handshake() {
+                        send(handshakeData, to: device)
+                    }
+                }
+            } else {
+                // Schreib-Characteristic auswählen: bevorzugt eine aus einem herstellerspezifischen
+                // Service (nicht Device Information / Generic Access / Nordic UART), die Write ohne
+                // Antwort unterstützt.
+                let isIgnoredService = ignoredServiceUUIDs.contains(service.uuid)
+                if canWrite && device.writeCharacteristic == nil && !isIgnoredService {
+                    device.writeCharacteristic = characteristic
+                    device.writeType = characteristic.properties.contains(.writeWithoutResponse) ? .withoutResponse : .withResponse
+                    device.addLog("Schreib-Characteristic gefunden: \(characteristic.uuid) in Service \(service.uuid)")
+                    for handshakeData in device.commands.handshake() {
+                        send(handshakeData, to: device)
+                    }
                 }
             }
 
             if characteristic.properties.contains(.notify) {
-                peripheral.setNotifyValue(true, for: characteristic)
-                device.notifyCharacteristic = characteristic
+                if forcedNotify == nil || characteristic.uuid == forcedNotify {
+                    peripheral.setNotifyValue(true, for: characteristic)
+                    device.notifyCharacteristic = characteristic
+                }
             }
         }
 
-        // Falls bis hierhin noch keine Schreib-Characteristic feststeht (z.B. weil alle
-        // gefundenen Services als "ignoriert" markiert waren), nimm die erste beschreibbare,
-        // die überhaupt existiert - besser als gar nichts.
-        if device.writeCharacteristic == nil {
+        // Falls bis hierhin noch keine Schreib-Characteristic feststeht und das Protokoll
+        // KEINE feste Characteristic vorschreibt (z.B. weil alle gefundenen Services als
+        // "ignoriert" markiert waren), nimm die erste beschreibbare, die überhaupt existiert -
+        // besser als gar nichts.
+        if device.writeCharacteristic == nil && forcedWrite == nil {
             for characteristic in service.characteristics ?? [] {
                 if characteristic.properties.contains(.writeWithoutResponse) || characteristic.properties.contains(.write) {
                     device.writeCharacteristic = characteristic

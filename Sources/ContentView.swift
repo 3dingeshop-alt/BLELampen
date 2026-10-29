@@ -28,16 +28,25 @@ struct ContentView: View {
                 }
 
                 Section("Gefunden") {
-                    ForEach(bt.discoveredDevices.filter { !$0.isConnected }) { device in
+                    ForEach(bt.visibleDiscoveredDevices) { device in
                         Button {
                             bt.connect(device)
                         } label: {
                             deviceRow(device, connected: false)
                         }
                     }
-                    if bt.discoveredDevices.filter({ !$0.isConnected }).isEmpty {
+                    if bt.visibleDiscoveredDevices.isEmpty {
                         Text(bt.isScanning ? "Suche läuft…" : "Keine Geräte gefunden.")
                             .foregroundStyle(.secondary)
+                    }
+                    if !bt.showAllDevices && bt.hiddenDeviceCount > 0 {
+                        Button {
+                            bt.showAllDevices = true
+                        } label: {
+                            Text("+ \(bt.hiddenDeviceCount) weitere Geräte in der Nähe ausblenden (Fernseher, Kopfhörer usw.) - zum Anzeigen tippen")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
             }
@@ -48,6 +57,13 @@ struct ContentView: View {
                         showTester = true
                     } label: {
                         Image(systemName: "wrench.and.screwdriver")
+                    }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        bt.showAllDevices.toggle()
+                    } label: {
+                        Image(systemName: bt.showAllDevices ? "eye" : "eye.slash")
                     }
                 }
                 ToolbarItem(placement: .navigationBarLeading) {
