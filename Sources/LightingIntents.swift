@@ -119,19 +119,19 @@ struct BLELampenShortcuts: AppShortcutsProvider {
         )
         AppShortcut(
             intent: SetLightColorIntent(),
-            phrases: ["Mach das Licht in \(.applicationName) \(\.$colorName)", "\(.applicationName) Farbe \(\.$colorName)"],
+            phrases: ["Ändere die Lichtfarbe in \(.applicationName)", "\(.applicationName) Farbe ändern"],
             shortTitle: "Farbe ändern",
             systemImageName: "paintpalette.fill"
         )
         AppShortcut(
             intent: SetLightBrightnessIntent(),
-            phrases: ["Stell die Helligkeit in \(.applicationName) auf \(\.$percent) Prozent"],
+            phrases: ["Stell die Helligkeit in \(.applicationName) ein", "\(.applicationName) Helligkeit ändern"],
             shortTitle: "Helligkeit",
             systemImageName: "sun.max"
         )
         AppShortcut(
             intent: RunLightSceneIntent(),
-            phrases: ["Starte \(.applicationName) Szene \(\.$sceneName)", "\(.applicationName) \(\.$sceneName) Modus"],
+            phrases: ["Starte eine Szene in \(.applicationName)", "\(.applicationName) Szene starten"],
             shortTitle: "Szene starten",
             systemImageName: "sparkles"
         )
