@@ -32,7 +32,7 @@ targets:
   BLELampenWidget:
     type: app-extension
     platform: iOS
-    deploymentTarget: "16.1"
+    deploymentTarget: "16.2"
     sources:
       - path: BLELampenWidget
       - path: Shared

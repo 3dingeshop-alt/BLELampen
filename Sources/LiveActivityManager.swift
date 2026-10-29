@@ -5,7 +5,7 @@ import Combine
 /// Startet/aktualisiert die Dynamic-Island- bzw. Sperrbildschirm-Live-Activity, solange
 /// mindestens eine Lampe verbunden ist, und beendet sie wieder, sobald keine mehr verbunden
 /// ist. Läuft automatisch im Hintergrund mit, ohne dass man etwas antippen muss.
-@available(iOS 16.1, *)
+@available(iOS 16.2, *)
 final class LiveActivityManager {
     static let shared = LiveActivityManager()
 

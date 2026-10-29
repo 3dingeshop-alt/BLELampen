@@ -11,7 +11,7 @@ struct BLELampenApp: App {
                 .environmentObject(LightingEnvironment.schedules)
                 .onAppear {
                     ScheduleRunner.shared.start()
-                    if #available(iOS 16.1, *) {
+                    if #available(iOS 16.2, *) {
                         LiveActivityManager.shared.start()
                     }
                 }
