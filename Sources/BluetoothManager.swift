@@ -7,6 +7,11 @@ import Combine
 /// Peripheral (die Zuordnung erfolgt über peripheral.identifier).
 final class BluetoothManager: NSObject, ObservableObject {
 
+    /// Eine einzige geteilte Instanz für die ganze App - wichtig, damit Siri-Befehle/
+    /// Kurzbefehle (App Intents) dieselben verbundenen Geräte steuern, die auch in der
+    /// normalen App-Oberfläche zu sehen sind, statt eine eigene, leere Instanz zu benutzen.
+    static let shared = BluetoothManager()
+
     @Published var isBluetoothReady = false
     @Published var isScanning = false
 

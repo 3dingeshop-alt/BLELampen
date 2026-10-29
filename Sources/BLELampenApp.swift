@@ -2,12 +2,16 @@ import SwiftUI
 
 @main
 struct BLELampenApp: App {
-    @StateObject private var bluetoothManager = BluetoothManager()
-
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .environmentObject(bluetoothManager)
+            MainTabView()
+                .environmentObject(LightingEnvironment.bt)
+                .environmentObject(LightingEnvironment.effects)
+                .environmentObject(LightingEnvironment.scenes)
+                .environmentObject(LightingEnvironment.schedules)
+                .onAppear {
+                    ScheduleRunner.shared.start()
+                }
         }
     }
 }
