@@ -14,13 +14,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.marcel.blelampen
-        INFOPLIST_KEY_CFBundleDisplayName: BLE Lampen
-        INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription: "Diese App braucht Bluetooth, um die LED-Lampen zu steuern."
-        INFOPLIST_KEY_NSBluetoothPeripheralUsageDescription: "Diese App braucht Bluetooth, um die LED-Lampen zu steuern."
-        INFOPLIST_KEY_UILaunchScreen_Generation: YES
-        INFOPLIST_KEY_UIBackgroundModes: "bluetooth-central"
-        INFOPLIST_KEY_NSSupportsLiveActivities: YES
-        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_FILE: Sources/Info.plist
         MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
         TARGETED_DEVICE_FAMILY: "1"
