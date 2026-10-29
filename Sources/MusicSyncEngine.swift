@@ -72,7 +72,7 @@ final class MusicSyncEngine: NSObject, ObservableObject {
         let normalized = max(0, min(1, (db + 50) / 50))
         let brightnessPercent = max(10, Int(normalized * 100))
 
-        hue += 0.004 + normalized * 0.02
+        hue += 0.004 + Double(normalized) * 0.02
         if hue > 1 { hue -= 1 }
         let (r, g, b) = hsvToRgb(h: hue, s: 0.85, v: 1)
 

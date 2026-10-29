@@ -29,7 +29,8 @@ final class ScheduleRunner {
     func checkDue() {
         let now = Date()
         let calendar = Calendar.current
-        let minuteKey = "\(calendar.component(.dayOfYear, from: now))-\(calendar.component(.hour, from: now)):\(calendar.component(.minute, from: now))"
+        let dayOfYear = calendar.ordinality(of: .day, in: .year, for: now) ?? 0
+        let minuteKey = "\(dayOfYear)-\(calendar.component(.hour, from: now)):\(calendar.component(.minute, from: now))"
 
         for schedule in LightingEnvironment.schedules.schedules where schedule.isEnabled {
             guard case .fixedTime(let hour, let minute) = schedule.trigger else { continue }
