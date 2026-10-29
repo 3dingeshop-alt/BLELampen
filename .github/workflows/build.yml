@@ -1,0 +1,45 @@
+name: Build unsigned IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - name: Code auschecken
+        uses: actions/checkout@v4
+
+      - name: XcodeGen installieren
+        run: brew install xcodegen
+
+      - name: Xcode-Projekt generieren
+        run: xcodegen generate
+
+      - name: Unsigniertes Archiv bauen
+        run: |
+          xcodebuild \
+            -project BLELampen.xcodeproj \
+            -scheme BLELampen \
+            -configuration Release \
+            -sdk iphoneos \
+            -archivePath build/BLELampen.xcarchive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            archive
+
+      - name: IPA von Hand packen (unsigniert, zum Sideloaden)
+        run: |
+          mkdir -p build/Payload
+          cp -R "build/BLELampen.xcarchive/Products/Applications/BLELampen.app" build/Payload/
+          cd build
+          zip -r BLELampen.ipa Payload
+
+      - name: IPA als Artefakt hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: BLELampen-unsigned-ipa
+          path: build/BLELampen.ipa
